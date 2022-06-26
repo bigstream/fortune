@@ -6,6 +6,7 @@ using Fortune.Data;
 using Fortune.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Azure.Cosmos;
 using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
@@ -19,38 +20,26 @@ namespace Fortune
 {
     public class Fortune
     {
-        private readonly ILogger<Fortune> _logger;
-
+        private readonly ILogger<Fortune> Log;
         private IDBClient DBClient { get; set; }
-
         private IMemoryCache MemoryCache { get; set; }
 
         public Fortune(ILogger<Fortune> log, IDBClient dBClient, IMemoryCache memoryCache)
         {
-            _logger = log;
+            Log = log;
             DBClient = dBClient;
             MemoryCache = memoryCache;
         }
 
-        [FunctionName("Fortune")]
-        [OpenApiOperation(operationId: "Run", tags: new[] { "name" })]
+        [FunctionName("ping")]
+        [OpenApiOperation(operationId: "Run", tags: new[] { "ping" })]
         [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
-        [OpenApiParameter(name: "name", In = ParameterLocation.Query, Required = true, Type = typeof(string), Description = "The **Name** parameter")]
         [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "text/plain", bodyType: typeof(string), Description = "The OK response")]
-        public async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
+        public IActionResult Ping([HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req)
         {
-            _logger.LogInformation("C# HTTP trigger function processed a request.");
+            Log.LogInformation("Ping!");
 
-            string name = req.Query["name"];
-
-            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            dynamic data = JsonConvert.DeserializeObject(requestBody);
-            name = name ?? data?.name;
-
-            string responseMessage = string.IsNullOrEmpty(name)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"Hello, {name}. This HTTP triggered function executed successfully.";
+            string responseMessage = "Hello World!";
 
             return new OkObjectResult(responseMessage);
         }
@@ -60,17 +49,19 @@ namespace Fortune
         [OpenApiOperation(operationId: "read", tags: new[] { "Template" })]
         [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
         [OpenApiParameter(name: "id", In = ParameterLocation.Query, Required = true, Type = typeof(Guid), Description = "The **Id** parameter: f.E.: b1251ce6-d4b5-40ce-b84e-9e84edf13962")]
-        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "text/plain", bodyType: typeof(string), Description = "The OK response")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "application/json", bodyType: typeof(FortuneTemplate), Description = "The template")]
         public async Task<IActionResult> ReadTemplate(
         [HttpTrigger(AuthorizationLevel.Function, "get", Route = "template")] HttpRequest req)
         {
-            _logger.LogInformation("C# HTTP trigger function processed a request.");
+            Log.LogInformation("Get Template.");
 
             string id = req.Query["id"];
+            Log.LogInformation($"TemplateID: {id}");
 
-            string responseMessage = string.IsNullOrEmpty(id)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"Hello, {id}. This HTTP triggered function executed successfully.";
+            // Get Template
+            var template = await DBClient.GetTemplateById(new Guid(id));
+
+            string responseMessage = JsonConvert.SerializeObject(template);
 
             return new OkObjectResult(responseMessage);
         }
@@ -79,24 +70,42 @@ namespace Fortune
         [OpenApiOperation(operationId: "create", tags: new[] { "Template" })]
         [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
         [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(FortuneTemplate), Description = "Template", Required = true)]
-        [OpenApiResponseWithBody(statusCode: HttpStatusCode.OK, contentType: "text/plain", bodyType: typeof(string), Description = "The OK response")]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "text/plain", bodyType: typeof(string), Description = "The Created response")]
         public async Task<IActionResult> CreateTemplate(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = "template")] HttpRequest req)
         {
-            _logger.LogInformation("C# HTTP trigger function processed a request.");
+            Log.LogInformation("Create Template.");
 
             var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var data = JsonConvert.DeserializeObject<FortuneTemplate>(requestBody);
+            var template = JsonConvert.DeserializeObject<FortuneTemplate>(requestBody);
 
-            string responseMessage = string.IsNullOrEmpty(data.Name)
-                ? "This HTTP triggered function executed successfully. Pass a name in the query string or in the request body for a personalized response."
-                : $"Hello, {data.Name}. This HTTP triggered function executed successfully.";
+            // Set IDs
+            template.Id = Guid.NewGuid();
+            template.Items.ForEach(x => x.Id = Guid.NewGuid());
 
-            return new OkObjectResult(responseMessage);
+            // Save Template
+            try
+            {
+                ItemResponse<FortuneTemplate> item = await DBClient.FortuneContainer.CreateItemAsync(template, new PartitionKey(template.Id.ToString()));
+                var response = item.Resource;
+                return new CreatedResult($"{nameof(response)}/{response.Id}", response);
+            }
+            catch (CosmosException e)
+            {
+                if (e.StatusCode == HttpStatusCode.Conflict)
+                {
+                    var errorMessage = $"Failed to create {nameof(FortuneTemplate)}. It already exists.";
+                    Log.LogError(e, errorMessage);
+                    return new ConflictObjectResult(errorMessage);
+                }
+                else
+                {
+                    var errorMessage = $"Failed to create {nameof(FortuneTemplate)}.";
+                    Log.LogError(e, errorMessage);
+                    return new BadRequestResult();
+                }
+            }
         }
-
-
-
     }
 }
 

@@ -20,21 +20,18 @@ namespace Fortune
         public override void Configure(IFunctionsHostBuilder builder)
         {
             // _ = builder.Services.AddSingleton<IAccessTokenProvider, AccessTokenProvider>(s => new AccessTokenProvider());
-            var config = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
-                .AddEnvironmentVariables()
-                .Build();
-
-            builder.Services.AddLogging(loggingBuilder =>
+            _ = builder.Services.AddLogging(loggingBuilder =>
             {
-                loggingBuilder.AddFilter(level => true);
+                _ = loggingBuilder.AddFilter(level => true);
             });
 
-            builder.Services.AddMemoryCache();
-            builder.Services.AddSingleton<ISettings, Settings>();
-            builder.Services.AddSingleton<IDBClient, DBClient>();
+            _ = builder.Services.AddMemoryCache();
+            _ = builder.Services.AddSingleton<ISettings, Settings>();
+            _ = builder.Services.AddSingleton<IDBClient, DBClient>();
 
+            var settings = builder.Services.BuildServiceProvider().GetRequiredService<ISettings>();
+
+            var test = settings.GetCosmosDBName();
         }
     }
 }

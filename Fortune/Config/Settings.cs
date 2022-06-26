@@ -1,12 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 namespace Fortune.Config
 {
-    internal class Settings : ISettings
+    public class Settings : ISettings
     {
         public string GetCosmosDBEndPoint()
         {
@@ -20,7 +21,7 @@ namespace Fortune.Config
 
         public string GetCosmosDBName()
         {
-            return GetConfigValueByKey("CosmosDB:DBName");
+            return GetConfigValueByKey("CosmosDB:Name");
         }
 
         public bool IsDevelopment()

@@ -1,4 +1,5 @@
-﻿using Microsoft.Azure.Cosmos;
+﻿using Fortune.Models;
+using Microsoft.Azure.Cosmos;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,5 +13,7 @@ namespace Fortune.Data
         Database Database { get; }
 
         Container FortuneContainer { get; }
+
+        Task<FortuneTemplate> GetTemplateById(Guid templateId);
     }
 }

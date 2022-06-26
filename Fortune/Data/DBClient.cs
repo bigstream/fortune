@@ -8,6 +8,7 @@ using Microsoft.Extensions.Caching.Memory;
 using Fortune.Config;
 using Microsoft.Azure.Cosmos.Fluent;
 using Fortune.Models;
+using Fortune.Extensions;
 
 namespace Fortune.Data
 {
@@ -70,5 +71,56 @@ namespace Fortune.Data
         public Container FortuneContainer => _fortuneContainer;
 
         public Database Database => _database;
+
+        public async Task<FortuneTemplate> GetTemplateById(Guid templateId)
+        {
+            FortuneTemplate template = null;
+            var cacheKey = $"{nameof(GetTemplateById)}:{templateId}";
+
+            ItemResponse<FortuneTemplate> cacheEntry = null;
+            try
+            {
+                if (_memoryCache.TryGetValue(cacheKey, out cacheEntry))
+                {
+                    var response = await _fortuneContainer.ReadItemAsync<FortuneTemplate>(templateId.ToString(), new PartitionKey(templateId.ToString()), new ItemRequestOptions() { IfNoneMatchEtag = cacheEntry.ETag });
+
+                    if (response.StatusCode == HttpStatusCode.NotModified)
+                    {
+                        return cacheEntry.Resource.DeepClone();
+                    }
+                    else
+                    {
+                        template = response.Resource;
+                    }
+
+                    cacheEntry = response;
+                }
+                else
+                {
+                    var response = await _fortuneContainer.ReadItemAsync<FortuneTemplate>(templateId.ToString(), new PartitionKey(templateId.ToString()));
+                    cacheEntry = response;
+                    template = response.Resource;
+                }
+
+                _ = _memoryCache.Set(cacheKey, cacheEntry);
+
+                return template.DeepClone();
+            }
+            catch (CosmosException e)
+            {
+                if (e.StatusCode == HttpStatusCode.NotFound)
+                {
+                    return null;
+                }
+                else if (e.StatusCode == HttpStatusCode.NotModified)
+                {
+                    return cacheEntry.Resource.DeepClone();
+                }
+                else
+                {
+                    throw e;
+                }
+            }
+        }
     }
 }
