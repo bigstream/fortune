@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net;
 using System.Threading.Tasks;
+using Fortune.Data;
 using Fortune.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -9,20 +10,26 @@ using Microsoft.Azure.WebJobs;
 using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Attributes;
 using Microsoft.Azure.WebJobs.Extensions.OpenApi.Core.Enums;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 
 namespace Fortune
 {
-
     public class Fortune
     {
         private readonly ILogger<Fortune> _logger;
 
-        public Fortune(ILogger<Fortune> log)
+        private IDBClient DBClient { get; set; }
+
+        private IMemoryCache MemoryCache { get; set; }
+
+        public Fortune(ILogger<Fortune> log, IDBClient dBClient, IMemoryCache memoryCache)
         {
             _logger = log;
+            DBClient = dBClient;
+            MemoryCache = memoryCache;
         }
 
         [FunctionName("Fortune")]
