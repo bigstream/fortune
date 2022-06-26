@@ -55,55 +55,78 @@ namespace Fortune
         {
             Log.LogInformation("Get Template.");
 
-            string id = req.Query["id"];
-            Log.LogInformation($"TemplateID: {id}");
+            try
+            {
+                string id = req.Query["id"];
+                Log.LogInformation($"TemplateID: {id}");
 
-            // Get Template
-            var template = await DBClient.GetTemplateById(new Guid(id));
+                // Get Template
+                var template = await DBClient.GetTemplateById(new Guid(id));
 
-            string responseMessage = JsonConvert.SerializeObject(template);
+                if (template == null)
+                {
+                    return new NotFoundResult();
+                }
 
-            return new OkObjectResult(responseMessage);
+                string responseMessage = JsonConvert.SerializeObject(template);
+
+                return new OkObjectResult(template);
+            }
+            catch (Exception e)
+            {
+                var errorMessage = $"Failed to {nameof(ReadTemplate)}.";
+                Log.LogError(errorMessage, e);
+                return new BadRequestObjectResult(errorMessage);
+            }
         }
 
         [FunctionName(nameof(CreateTemplate))]
         [OpenApiOperation(operationId: "create", tags: new[] { "Template" })]
         [OpenApiSecurity("function_key", SecuritySchemeType.ApiKey, Name = "code", In = OpenApiSecurityLocationType.Query)]
-        [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(FortuneTemplate), Description = "Template", Required = true)]
-        [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "text/plain", bodyType: typeof(string), Description = "The Created response")]
+        [OpenApiRequestBody(contentType: "application/json", bodyType: typeof(FortuneTemplate), Description = "The Template - IDs will be created automatically.", Required = true)]
+        [OpenApiResponseWithBody(statusCode: HttpStatusCode.Created, contentType: "application/json", bodyType: typeof(FortuneTemplate), Description = "The Created response")]
         public async Task<IActionResult> CreateTemplate(
             [HttpTrigger(AuthorizationLevel.Function, "post", Route = "template")] HttpRequest req)
         {
             Log.LogInformation("Create Template.");
 
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var template = JsonConvert.DeserializeObject<FortuneTemplate>(requestBody);
-
-            // Set IDs
-            template.Id = Guid.NewGuid();
-            template.Items.ForEach(x => x.Id = Guid.NewGuid());
-
-            // Save Template
             try
             {
-                ItemResponse<FortuneTemplate> item = await DBClient.FortuneContainer.CreateItemAsync(template, new PartitionKey(template.Id.ToString()));
-                var response = item.Resource;
-                return new CreatedResult($"{nameof(response)}/{response.Id}", response);
+                var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+                var template = JsonConvert.DeserializeObject<FortuneTemplate>(requestBody);
+
+                // Set IDs
+                template.Id = Guid.NewGuid();
+                template.Items.ForEach(x => x.Id = Guid.NewGuid());
+
+                // Save Template
+                try
+                {
+                    ItemResponse<FortuneTemplate> item = await DBClient.FortuneContainer.CreateItemAsync(template, new PartitionKey(template.Id.ToString()));
+                    var response = item.Resource;
+                    return new CreatedResult($"{nameof(response)}/{response.Id}", response);
+                }
+                catch (CosmosException e)
+                {
+                    if (e.StatusCode == HttpStatusCode.Conflict)
+                    {
+                        var errorMessage = $"Failed to create {nameof(FortuneTemplate)}. It already exists.";
+                        Log.LogError(e, errorMessage);
+                        return new ConflictObjectResult(errorMessage);
+                    }
+                    else
+                    {
+                        var errorMessage = $"Failed to create {nameof(FortuneTemplate)}.";
+                        Log.LogError(e, errorMessage);
+                        return new BadRequestResult();
+                    }
+                }
             }
-            catch (CosmosException e)
+            catch (Exception e)
             {
-                if (e.StatusCode == HttpStatusCode.Conflict)
-                {
-                    var errorMessage = $"Failed to create {nameof(FortuneTemplate)}. It already exists.";
-                    Log.LogError(e, errorMessage);
-                    return new ConflictObjectResult(errorMessage);
-                }
-                else
-                {
-                    var errorMessage = $"Failed to create {nameof(FortuneTemplate)}.";
-                    Log.LogError(e, errorMessage);
-                    return new BadRequestResult();
-                }
+                var errorMessage = $"Failed to {nameof(ReadTemplate)}.";
+                Log.LogError(errorMessage, e);
+                return new BadRequestObjectResult(errorMessage);
             }
         }
     }
