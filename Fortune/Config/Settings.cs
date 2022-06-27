@@ -11,17 +11,17 @@ namespace Fortune.Config
     {
         public string GetCosmosDBEndPoint()
         {
-            return GetConfigValueByKey("CosmosDB:EndPoint");
+            return GetConfigValueByKey("CosmosDBEndPoint");
         }
 
         public string GetCosmosDBKey()
         {
-            return GetConfigValueByKey("CosmosDB:Key");
+            return GetConfigValueByKey("CosmosDBKey");
         }
 
         public string GetCosmosDBName()
         {
-            return GetConfigValueByKey("CosmosDB:Name");
+            return GetConfigValueByKey("CosmosDBName");
         }
 
         public bool IsDevelopment()
